@@ -1,102 +1,135 @@
-from telegram.ext import Updater, MessageHandler, CommandHandler,filters,ContextTypes
-from telegram.ext import Application,CallbackContext,ConversationHandler
-from telegram import ForceReply,Update
+from telegram.ext import Updater, MessageHandler, CommandHandler,filters
+from telegram.ext import CallbackContext,ConversationHandler,Application,ContextTypes
+from telegram import Update,ReplyKeyboardMarkup,ReplyKeyboardRemove
 import logging
 
-# Game States
-START,FIRST_CHOICE,SECOND_CHOICE,THIRD_CHOICE=range(4)
+# Define game states
+START, FIRST_CHOICE, SECOND_CHOICE,TREASURE,DEAD_END,LOST = range(6)
+# Define the Keyboards
+start_keyboard=[['Left','Right']]
+start_markup = ReplyKeyboardMarkup(start_keyboard, one_time_keyboard=True)
 
-# Game Start function
-def start(update:Update,context:CallbackContext)->int:
-    update.message.reply_text("Welcome To The Text Adventure Game?\n""You find yourself in a room with only 2 exits. one to the North and the other to the south""Do you want to go North (N) or South (S)?")
+first_choice_keyboard=[['Left','Straight']]
+first_choice_markup = ReplyKeyboardMarkup(first_choice_keyboard, one_time_keyboard=True)
+
+second_choice_keyboard=[['Left','Right']]
+second_choice_markup = ReplyKeyboardMarkup(second_choice_keyboard, one_time_keyboard=True)
+
+# Define the start function
+async def start(update: Update, context: CallbackContext) -> int:
+    await update.message.reply_text(
+        "Welcome to the Leafy Maze Adventure!\n"
+        "You find yourself at the entrance of a large, leafy maze. The paths look confusing and twist in various directions.\n"
+        "Do you want to go 'left' or 'right'?"
+        reply_markup=start_markup
+    )
     return FIRST_CHOICE
 
-# handle first choice
-def first_choice(update:Update,context:CallbackContext)->int:
-    choice=update.message.text.lower()
-    if choice == 'n':
-        update.message.reply_text(
-            '''You  head to the door to the north.
-            Upon reaching the door you notice that the door is unlocked do you want to enter (y or n)?''' 
+# Handle the first choice
+async def first_choice(update: Update, context: CallbackContext) -> int:
+    choice = update.message.text.lower()
+    if choice == 'left':
+        await update.message.reply_text(
+            "You take the left path and soon reach another fork in the path.\n"
+            "Do you want to go 'left' or 'straight'?"
+            reply_markup=first_choice_markup
         )
         return SECOND_CHOICE
-    elif choice == 'south':
-        update.message.reply_text(
-            '''You head south and reach a wall that has the number 42 etched deeply into it.
-            You can head north only'''
+    elif choice == 'right':
+        await update.message.reply_text(
+            "You take the right path and soon reach a dead end. You turn back to the start.\n"
+            "Do you want to go 'left' or 'right'?"
+            reply_markup=start_markup
         )
         return FIRST_CHOICE
     else:
-        update.message.reply_text("Invalid choice. Please choose North or South.")
+        await update.message.reply_text(
+            "Invalid choice. Please type 'left' or 'right'."
+            reply_markup=start_markup
+        )
         return FIRST_CHOICE
 
-# Second room that has 3 doors
-def second_choice(update:Update,context:CallbackContext)->int:
-    choice=update.message.text.lower()
-    if choice =='y':
-        update.message.reply_text(
-            '''You enter the room. 
-            The room is dark but illuminated by candles
-            There are 3 doors, at the far end of the room.
-            The doors are numbered 1-3 starting from the left
-            Pick a door (1-3)'''
+# Handle the second choice
+async def second_choice(update: Update, context: CallbackContext) -> int:
+    choice = update.message.text.lower()
+    if choice == 'left':
+        await update.message.reply_text(
+            "You take the left path and find yourself at another fork.\n"
+            "Do you want to go 'left' or 'right'?"
+            reply_markup=second_choice_markup
         )
-        return THIRD_CHOICE
-    elif choice=='n':
-        update.message.reply_text(
-            '''You retrace your steps and have the option to go to the wall or the door you just came through
-            Do you want to go through the door(y or n)?'''
-        )
-        return FIRST_CHOICE
-    else:
-        update.message.reply_text("Invalid, please choose y or n")
-        return SECOND_CHOICE
+        return TREASURE
+    elif choice == 'straight':
+        await update.message.reply_text(
+            "You walk straight and find a hidden treasure chest! Congratulations, you have found the treasure and completed the adventure!"
 
-def third_choice(update:Update,context:CallbackContext)->int:
-    choice= update.message.text.lower()
-    if choice=="1":
-        update.message.reply_text(
-            '''You are enter the first door
-            You are greeted by repetition'''
-        )
-        return FIRST_CHOICE
-    elif choice=="2":
-        update.message.reply_text(
-            '''You are enter the first door
-            You are greeted by Victory'''
         )
         return ConversationHandler.END
-    elif choice=="2":
-        update.message.reply_text(
-            '''You are enter the Third door
-            You are greeted by repetition'''
-        )
-        return FIRST_CHOICE
     else:
-        update.message.reply_text("Invalid, choose either door 1,2 or 3")
-        return THIRD_CHOICE
+        await update.message.reply_text(
+            "Invalid choice. Please type 'left' or 'straight'."
+            reply_markup=first_choice_markup
+        )
+        return SECOND_CHOICE
 
-# handle cancel
-def cancel(update:Update,context:CallbackContext)->int:
-    update.message.reply_text("Adventure cancelled")
+async def treasure(update: Update, context: CallbackContext) -> int:
+    choice = update.message.text.lower()
+    if choice == 'left':
+        await update.message.reply_text(
+            "You take the left path and find yourself lost in the maze. You wander around but can't find your way back. You are lost."
+        )
+        return LOST
+    elif choice == 'right':
+        await update.message.reply_text(
+            "You take the right path and find yourself at a dead end. You turn back to the previous fork.\n"
+            "Do you want to go 'left' or 'right'?"
+            reply_markup=second_choice_markup
+        )
+        return SECOND_CHOICE
+    else:
+        await update.message.reply_text(
+            "Invalid choice. Please type 'left' or 'right'."
+            reply_markup=second_choice_markup
+        )
+        return TREASURE
+
+async def dead_end(update:Update,context:CallbackContext)->int:
+    await update.message.reply_text(
+        "You reach a dead end and have to turn back. Do you want to go left or right?"
+        reply_markup=start_markup
+    )
+    return FIRST_CHOICE
+async def lost(update:Update,context:CallbackContext)->int:
+    await update.message.reply_text(
+        "You wander aimlessly and realize you are hopelessly lost.The Adventure ends here"
+    )
+    return ConversationHandler.END
+# Handle the cancel command
+async def cancel(update: Update, context: CallbackContext) -> int:
+    await update.message.reply_text(
+        "Adventure canceled. See you next time!"
+    )
     return ConversationHandler.END
 
 def main()->None:
     Token="7453996986:AAGSyvVzDgLehyO_cF1Ejzyeclu1E0779MM"
-    updater=Updater(Token,use_context=True)
-    dp=updater.dispatcher
-    conv_handler=ConversationHandler(
-        entry_points=[CommandHandler('start',start)],
-        states={FIRST_CHOICE:[MessageHandler(filters.text & ~filters.command,first_choice)],
-                SECOND_CHOICE:[MessageHandler(filters.text & ~filters.command,second_choice)],
-                THIRD_CHOICE:[MessageHandler(filters.text & ~filters.command,third_choice)],
-                },
-        fallbacks=[CommandHandler('cancel',cancel)]
-    )
-    dp.add_handler(conv_handler)
-    updater.start_polling()
-    updater.idle()
+    application=Application.builder().token(Token).build()
     
+    
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            FIRST_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, first_choice)],
+            SECOND_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, second_choice)],
+            TREASURE: [MessageHandler(filters.TEXT & ~filters.COMMAND, treasure)],
+            DEAD_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, dead_end)],
+            LOST: [MessageHandler(filters.TEXT & ~filters.COMMAND, lost)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+
+    application.add_handler(conv_handler)
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()

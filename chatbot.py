@@ -1,11 +1,21 @@
 from telegram.ext import Updater, MessageHandler, CommandHandler,filters
 from telegram.ext import CallbackContext,ConversationHandler,Application,ContextTypes
 from telegram import Update,ReplyKeyboardMarkup,ReplyKeyboardRemove
-import logging
+import spacy
+import requests
+from bs4 import BeautifulSoup
 
-# Define game states
-START, FIRST_CHOICE, SECOND_CHOICE,TREASURE,DEAD_END,LOST = range(6)
-# Define the Keyboards
+# Load spaCy model
+nlp=spacy.load("en_core_web_sm")
+
+# Define States the the Conversation handler
+# 
+#
+FIRST_CHOICE, SECOND_CHOICE,TREASURE,DEAD_END,LOST,MAZE,MAIN_MENU,SUMMARIZE,URL,TEXT = range(10)
+# Define the Keyboards 
+main_menu_keyboard=[['Maze Game','Content Summarizer']]
+main_menu_markup=ReplyKeyboardMarkup(main_menu_keyboard,one_time_keyboard=True)
+
 start_keyboard=[['Left','Right']]
 start_markup = ReplyKeyboardMarkup(start_keyboard, one_time_keyboard=True)
 
@@ -15,36 +25,63 @@ first_choice_markup = ReplyKeyboardMarkup(first_choice_keyboard, one_time_keyboa
 second_choice_keyboard=[['Left','Right']]
 second_choice_markup = ReplyKeyboardMarkup(second_choice_keyboard, one_time_keyboard=True)
 
+
+
+
 # Define the start function
 async def start(update: Update, context: CallbackContext) -> int:
     await update.message.reply_text(
-        "Welcome to the Leafy Maze Adventure!\n"
-        "You find yourself at the entrance of a large, leafy maze. The paths look confusing and twist in various directions.\n"
-        "Do you want to go 'left' or 'right'?"
-        reply_markup=start_markup
+        "Welcome to the Multi-Use Bot!\n"
+        "You can choose to play the Maze Game or use the Content summarizer.\n"
+        "Please choose an option.",
+        reply_markup=main_menu_markup
     )
-    return FIRST_CHOICE
+    return MAIN_MENU
+
+# Handles the Main menu
+async def main_menu(update:Update,context:CallbackContext)->int:
+    choice=update.message.text
+    if choice=="Maze Game":
+        await update.message.reply_text(
+            "Welcome to the Leafy Maze of Adventure!\n"
+            "You find yourself at the entrance of a leafy maze. The paths look confusing and contain various twists and turns\n"
+            "Do you want to go 'left' or 'right'.",
+            reply_markup=start_markup
+        )
+        return FIRST_CHOICE
+    elif choice =='Content Summarizer':
+        await update.message.reply_text(
+            "Send the text you want summarized or send the URL",
+            
+        )
+        return SUMMARIZE
+    else:
+        await update.message.reply_text(
+            "Invalid choice. Please choose Maze game or Content Summarizer.",
+            reply_markup=main_menu_markup
+        )
+        return MAIN_MENU
 
 # Handle the first choice
 async def first_choice(update: Update, context: CallbackContext) -> int:
     choice = update.message.text.lower()
     if choice == 'left':
         await update.message.reply_text(
-            "You take the left path and soon reach another fork in the path.\n"
-            "Do you want to go 'left' or 'straight'?"
+            "You take the left path and soon reach another fork in the path.\n",
+            "Do you want to go 'left' or 'straight'?",
             reply_markup=first_choice_markup
         )
         return SECOND_CHOICE
     elif choice == 'right':
         await update.message.reply_text(
-            "You take the right path and soon reach a dead end. You turn back to the start.\n"
-            "Do you want to go 'left' or 'right'?"
+            "You take the right path and soon reach a dead end. You turn back to the start.\n",
+            "Do you want to go 'left' or 'right'?",
             reply_markup=start_markup
         )
         return FIRST_CHOICE
     else:
         await update.message.reply_text(
-            "Invalid choice. Please type 'left' or 'right'."
+            "Invalid choice. Please type 'left' or 'right'.",
             reply_markup=start_markup
         )
         return FIRST_CHOICE
@@ -55,7 +92,7 @@ async def second_choice(update: Update, context: CallbackContext) -> int:
     if choice == 'left':
         await update.message.reply_text(
             "You take the left path and find yourself at another fork.\n"
-            "Do you want to go 'left' or 'right'?"
+            "Do you want to go 'left' or 'right'?",
             reply_markup=second_choice_markup
         )
         return TREASURE
@@ -67,7 +104,7 @@ async def second_choice(update: Update, context: CallbackContext) -> int:
         return ConversationHandler.END
     else:
         await update.message.reply_text(
-            "Invalid choice. Please type 'left' or 'straight'."
+            "Invalid choice. Please type 'left' or 'straight'.",
             reply_markup=first_choice_markup
         )
         return SECOND_CHOICE
@@ -82,20 +119,20 @@ async def treasure(update: Update, context: CallbackContext) -> int:
     elif choice == 'right':
         await update.message.reply_text(
             "You take the right path and find yourself at a dead end. You turn back to the previous fork.\n"
-            "Do you want to go 'left' or 'right'?"
+            "Do you want to go 'left' or 'right'?",
             reply_markup=second_choice_markup
         )
         return SECOND_CHOICE
     else:
         await update.message.reply_text(
-            "Invalid choice. Please type 'left' or 'right'."
+            "Invalid choice. Please type 'left' or 'right'.",
             reply_markup=second_choice_markup
         )
         return TREASURE
 
 async def dead_end(update:Update,context:CallbackContext)->int:
     await update.message.reply_text(
-        "You reach a dead end and have to turn back. Do you want to go left or right?"
+        "You reach a dead end and have to turn back. Do you want to go left or right?",
         reply_markup=start_markup
     )
     return FIRST_CHOICE
@@ -111,6 +148,41 @@ async def cancel(update: Update, context: CallbackContext) -> int:
     )
     return ConversationHandler.END
 
+# Content Summarizer
+def summarize(update:Update,context:CallbackContext)->int:
+    text=update.message.text
+    if text.startswith("http"):
+        return handle_url(update,context)
+    else:
+        return handle_text(update,context)
+async def handle_url(update:Update,content:CallbackContext)->int:
+    url=update.message.text
+    try:
+        response=requests.get(url)
+        soup=BeautifulSoup(response.content,'html.parser')
+        paragraphs=soup.find_all('p')
+        text=' '.join([para.text for para in paragraphs])
+        summary=summarize_text(text)
+        await update.message.reply_text(f"Summary:\n{summary}")
+    except Exception as e:
+        await update.message.reply_text("An error occurred while processing the URL. Please try again.")
+    return ConversationHandler.END
+
+async def handle_text(update:Update,context:CallbackContext)->int:
+    text=update.message.text
+    summary=summarize_text(text)
+    await update.message.reply_text(f"Summary:\n{summary}")
+    return ConversationHandler.END
+
+async def summarize_text(text:str)-> str:
+    doc=nlp(text)
+    sentences=[sent.text for sent in doc.sents]
+    if len(sentences)>5:
+        summary=' '.join(sentences[:5])
+    else:
+        summary=text
+    return summary
+
 def main()->None:
     Token="7453996986:AAGSyvVzDgLehyO_cF1Ejzyeclu1E0779MM"
     application=Application.builder().token(Token).build()
@@ -119,11 +191,15 @@ def main()->None:
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
+            MAIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, main_menu)],
             FIRST_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, first_choice)],
             SECOND_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, second_choice)],
             TREASURE: [MessageHandler(filters.TEXT & ~filters.COMMAND, treasure)],
             DEAD_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, dead_end)],
             LOST: [MessageHandler(filters.TEXT & ~filters.COMMAND, lost)],
+            URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_url)],
+            TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
+            SUMMARIZE: [MessageHandler(filters.TEXT & ~filters.COMMAND, summarize)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
     )

@@ -9,3 +9,6 @@
 ***Content Summarizer***
 - URL or text
 - will summarize and give output
+
+>[!NOTE]
+>Used ChatGpt for ideas
